@@ -125,6 +125,16 @@ if st.session_state["user"] is None:
 u = st.session_state["user"]
 name = (getattr(u, "user_metadata", None) or {}).get("name") or getattr(u, "email", "Rider")
 st.success(f"Welcome, {name}!")
+# --- Daily limit gate (add right under the welcome line) ---
+uid = st.session_state["user"].id  # Supabase user id
+limit, plan = get_plan_limit(uid)
+used = analyses_today_count(uid)
+
+st.caption(f"Plan: **{plan.capitalize()}** • Today’s analyses: **{used}/{limit}**")
+
+if used >= limit:
+    upgrade_panel()
+    st.stop()  # don’t render the uploader if over the limit
 
 st.markdown("### 📤 Upload Your Gate Start Video")
 st.markdown(
@@ -171,3 +181,12 @@ if uploaded:
             # Optional: let rider download the analyzed video
             with open(res["video_overlay_path"], "rb") as f:
                 st.download_button("Download analyzed video", f, file_name="gatesnap_analysis.mp4")
+            # 4) Record today’s usage
+            record_analysis(uid)
+            st.success("Usage recorded for today.")
+            with open(res["video_overlay_path"], "rb") as f:
+                st.download_button("Download analyzed video", f, file_name="gatesnap_analysis.mp4")
+
+            # 4) Record today’s usage
+            record_analysis(uid)
+            st.success("Usage recorded for today.")
