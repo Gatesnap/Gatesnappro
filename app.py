@@ -205,9 +205,14 @@ if st.session_state["user"] is None:
 # ---- Logged in: show uploader ----
 u = st.session_state["user"]
 name = (getattr(u, "user_metadata", None) or {}).get("name") or getattr(u, "email", "Rider")
-st.success(f"Welcome, {name
+st.success(f"Welcome, {name}!")
+
                       # --- Daily limit gate (do this before showing the uploader) ---
 uid = u.id  # Supabase user id
+limit, plan = get_plan_limit(uid, name)
+used = analyses_today_count(uid)
+
+uid = u.id
 limit, plan = get_plan_limit(uid, name)
 used = analyses_today_count(uid)
 
@@ -215,7 +220,7 @@ st.caption(f"Plan: **{plan.capitalize()}** • Today’s analyses: **{used}/{lim
 
 if used >= limit:
     upgrade_panel()
-    st.stop()  # stops the script before the uploader renders
+    st.stop() # stops the script before the uploader renders
 
 # --- Daily limit gate (add right under the welcome line) ---
 uid = st.session_state["user"].id  # Supabase user id
