@@ -3,6 +3,60 @@ import os
 import streamlit as st
 from supabase import create_client
 
+from datetime import datetime, timedelta, timezone
+import streamlit as st
+
+PLAN_LIMITS = {"free": 1, "pro": 3, "team": 15, "coach": 50}
+
+def _today_bounds_utc():
+    now = datetime.now(timezone.utc)
+    start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    end = start + timedelta(days=1)
+    return start.isoformat(), end.isoformat()
+
+def get_or_create_profile(user_id):
+    # read
+    res = sb.table("profiles").select("*").eq("user_id", user_id).maybe_single().execute()
+    if res.data:
+        return res.data
+    # create (default free)
+    newp = {"user_id": user_id, "plan": "free"}
+    sb.table("profiles").insert(newp).execute()
+    return newp
+
+def get_plan_limit(user_id):
+    prof = get_or_create_profile(user_id)
+    plan = (prof or {}).get("plan", "free").lower()
+    return PLAN_LIMITS.get(plan, 1), plan
+
+def analyses_today_count(user_id):
+    start, end = _today_bounds_utc()
+    res = sb.table("analyses")\
+            .select("id", count="exact")\
+            .eq("user_id", user_id)\
+            .gte("created_at", start)\
+            .lt("created_at", end)\
+            .execute()
+    return res.count or 0
+
+def record_analysis(user_id):
+    sb.table("analyses").insert({"user_id": user_id}).execute()
+
+def upgrade_panel():
+    st.error("You’ve used your free analysis for today.")
+    st.markdown("**Upgrade for more daily analyses:**")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.link_button("Go Pro (3/day) £9.99/yr",
+                       "https://buy.stripe.com/eVqeVdamUgkQ7Isgd19EI00")
+    with col2:
+        st.link_button("Team (15/day) £49.99/yr",
+                       "https://buy.stripe.com/cNi4gzfHe1pW5AkaSH9EI01")
+    with col3:
+        st.link_button("Coach (50/day) £99.99/yr",
+                       "https://buy.stripe.com/4gM14n52A3y47Is8Kz9EI02")
+
+
 # ⛳ Supabase (make sure these are set in Railway Variables)
 SUPABASE_URL = os.getenv("SUPABASE_URL", "https://cdoxzmtxcfsuoviinxxd.supabase.co")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
