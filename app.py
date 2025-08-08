@@ -12,22 +12,21 @@ st.set_page_config(page_title="GateSnap AI", layout="centered")
 st.markdown("<h1 style='color: white;'>GateSnap AI</h1>", unsafe_allow_html=True)
 
 # Session State
-if "user" not in st.session_state:
-    st.session_state.user = None
+if st.session_state['auth_action'] == 'login':
+    email = st.session_state['email']
+    password = st.session_state['password']
 
-def show_login():
-    st.subheader("Login to GateSnap")
-    email = st.text_input("Email")
-    password = st.text_input("Password", type="password")
+    try:
+        response = supabase.auth.sign_in_with_password({"email": email, "password": password})
 
-    if st.button("Login"):
-        try:
-            res = supabase.auth.sign_in_with_password({"email": email, "password": password})
-            st.session_state.user = res.user
-            st.success("Logged in!")
-            st.experimental_rerun()
-        except Exception as e:
-            st.error("Login failed. Check your credentials.")
+        if response.user:
+            st.success("✅ Logged in successfully")
+            st.session_state['user'] = response.user
+        else:
+            st.error("❌ Login failed. Check your credentials.")
+
+    except Exception as e:
+        st.error(f"❌ Login failed: {str(e)}")
 
 def show_signup():
     st.subheader("Create Free Account")
