@@ -1,69 +1,82 @@
 import streamlit as st
-import cv2
-import numpy as np
-import tempfile
-import mediapipe as mp
+
+
+# Branding CSS
+st.markdown("""
+<style>
+h1, h2, h3 { letter-spacing: 0.2px; }
+.stButton>button {
+  background:#8CF51C;
+  color:#000;
+  border:0;
+  font-weight:700;
+}
+.stButton>button:hover {
+  filter:brightness(0.9);
+}
+.block-container { padding-top: 1.2rem; }
+</style>
+""", unsafe_allow_html=True)
+
+import streamlit as st
 from PIL import Image
 
-st.set_page_config(page_title="GateSnap AI", layout="centered", page_icon="🚦")
+st.set_page_config(page_title="GateSnap AI", layout="centered")
 
-st.markdown(
-    "<h1 style='text-align: center; color: #00FF88;'>GateSnap AI</h1>"
-    "<h3 style='text-align: center; color: white;'>Body Position Analysis for BMX Riders</h3>",
-    unsafe_allow_html=True,
-)
 
-st.markdown(
-    "<div style='text-align: center;'><img src='https://www.gatesnap.pro/logo.png' width='150'></div><br>",
-    unsafe_allow_html=True,
-)
+st.title("Body Position Analysis for BMX Riders")
 
-st.markdown(
-    "<p style='text-align: center;'>Upload a 3–6 second video for analysis. "
-    "<br><strong style='color: #00FF88;'>Set camera to 1080p at 30fps</strong> and use a tripod for best results.</p>",
-    unsafe_allow_html=True,
-)
+st.markdown("### Create a Free Account")
+with st.form("signup_form"):
+    name = st.text_input("Full name")
+    email = st.text_input("Email")
+    password = st.text_input("Password", type="password")
+    agree = st.checkbox("I agree to the Terms & Privacy")
+    submitted = st.form_submit_button("Create my free account")
+    if submitted:
+        if not (name and email and password and agree):
+            st.error("Please complete all fields and agree to continue.")
+        else:
+            st.success("Account created (placeholder). Login will be enabled after we connect Firebase.")
 
-uploaded_file = st.file_uploader("🎥 Upload your BMX gate start video (max 6 seconds)", type=["mp4", "mov", "avi"])
+with st.expander("🎯 Plans (Free forever, upgrades optional)", expanded=True):
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.markdown("**Free** • 1 analysis / day • £0 / forever")
+    with col2:
+        st.markdown("**Pro** • 3/day • £9.99 / year")
+        st.link_button("Upgrade to Pro", "https://buy.stripe.com/eVqeVdamUgkQ7Isgd19EI00")
+    with col3:
+        st.markdown("**Team** • 15/day • £49.99 / year")
+        st.link_button("Team Upgrade", "https://buy.stripe.com/cNi4gzfHe1pW5AkaSH9EI01")
+    st.markdown("**Coach License** • 50/day • £99.99 / year")
+    st.link_button("Coach Upgrade", "https://buy.stripe.com/4gM14n52A3y47Is8Kz9EI02")
 
-def process_video(video_path):
-    mp_pose = mp.solutions.pose
-    pose = mp_pose.Pose(static_image_mode=False)
-    cap = cv2.VideoCapture(video_path)
-    feedback_given = False
+st.markdown("### 📤 Upload Your Gate Start Video")
+st.markdown("""
+✅ Set your phone to **1080p at 30fps**  
+✅ Crop your video to **2–6 seconds**  
+✅ Film from the **side**, showing your full body  
+✅ For best results, use a **tripod or stable surface**
 
-    while cap.isOpened():
-        ret, frame = cap.read()
-        if not ret:
-            break
+⚠️ Videos over 6 seconds or under 2 seconds will be rejected  
+⚠️ Avoid 4K or 60fps – they may fail to upload
+""")
 
-        # Resize for performance
-        frame = cv2.resize(frame, (640, 360))
-        results = pose.process(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+uploaded_file = st.file_uploader("🎬 Upload your video", type=["mp4", "mov"])
 
-        if results.pose_landmarks and not feedback_given:
-            landmarks = results.pose_landmarks.landmark
+from pose_analysis import analyze_video
 
-            # Example: get joint angles (basic - hip/knee/elbow)
-            hip_angle = np.abs(landmarks[23].y - landmarks[25].y) * 180
-            knee_angle = np.abs(landmarks[25].y - landmarks[27].y) * 180
-            elbow_angle = np.abs(landmarks[11].y - landmarks[13].y) * 180
-
-            st.markdown("### 🧠 GateSnap AI Review")
-            st.success("✅ Torso: 42° (✔ Good)")
-            st.success("✅ Hip: {:.0f}°".format(hip_angle))
-            st.warning("⚠️ Knee: {:.0f}° (Too open)".format(knee_angle))
-            st.warning("⚠️ Elbow: {:.0f}° (Too straight)".format(elbow_angle))
-            st.info("🗣 Tip: Bring knees forward slightly and bend elbows.")
-            feedback_given = True
-
-    cap.release()
-
-if uploaded_file is not None:
-    if uploaded_file.size > 50 * 1024 * 1024:
-        st.error("File too large! Please upload a video under 50MB.")
+# After upload
+frame, analysis = analyze_video(uploaded_file)
+if not analysis or "angles" not in analysis:
+    st.error(f"Error: {analysis}")
+else:
+    st.image(frame, caption="Analysis Frame", channels="BGR")
+    for k, v in analysis["angles"].items():
+        st.write(f"{k.title()}: {v:.1f}°")
+    if analysis["tips"]:
+        st.warning("Tip: " + " ".join(analysis["tips"]))
     else:
-        tfile = tempfile.NamedTemporaryFile(delete=False)
-        tfile.write(uploaded_file.read())
-        st.video(tfile.name)
-        process_video(tfile.name)
+        st.success("Your form looks good!")
+
