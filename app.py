@@ -277,7 +277,14 @@ if uploaded:
 
             # Optional: let rider download the analyzed video
             with open(res["video_overlay_path"], "rb") as f:
-                st.download_button("Download analyzed video", f, file_name="gatesnap_analysis.mp4")
+               import os
+st.download_button(
+    "Download analyzed video",
+    f,
+    file_name="gatesnap_analysis.mp4",
+    key=f"dl-{os.path.basename(res['video_overlay_path'])}"
+)
+
             # 4) Record today’s usage
             record_analysis(uid)
             st.success("Usage recorded for today.")
