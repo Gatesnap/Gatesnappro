@@ -61,6 +61,87 @@ def upgrade_panel():
 SUPABASE_URL = os.getenv("SUPABASE_URL", "https://cdoxzmtxcfsuoviinxxd.supabase.co")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
 sb = create_client(SUPABASE_URL, SUPABASE_KEY)
+# ---- DAILY LIMIT HELPERS ----
+from datetime import datetime, timedelta, timezone
+
+PLAN_LIMITS = {"free": 1, "pro": 3, "team": 15, "coach": 50}
+
+def _today_bounds_utc():
+    now = datetime.now(timezone.utc)
+    start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    end = start + timedelta(days=1)
+    return start.isoformat(), end.isoformat()
+
+def _safe_single(res):
+    try:
+        d = getattr(res, "data", None)
+        if isinstance(d, list):
+            return d[0] if d else None
+        if isinstance(d, dict):
+            return d
+        return None
+    except Exception:
+        return None
+
+def get_or_create_profile(user_id, display_name=None):
+    # read
+    try:
+        res = sb.table("profiles").select("*").eq("user_id", user_id).limit(1).execute()
+        row = _safe_single(res)
+        if row:
+            return row
+    except Exception:
+        pass
+    # create if missing (default free)
+    payload = {"user_id": user_id, "plan": "free"}
+    if display_name:
+        payload["name"] = display_name
+    try:
+        ins = sb.table("profiles").insert(payload).execute()
+        return _safe_single(ins) or payload
+    except Exception:
+        return payload
+
+def get_plan_limit(user_id, display_name=None):
+    prof = get_or_create_profile(user_id, display_name)
+    plan = (prof or {}).get("plan", "free")
+    if not isinstance(plan, str):
+        plan = "free"
+    plan = plan.lower()
+    return PLAN_LIMITS.get(plan, 1), plan
+
+def analyses_today_count(user_id):
+    start, end = _today_bounds_utc()
+    try:
+        res = (
+            sb.table("analyses")
+            .select("id", count="exact")
+            .eq("user_id", user_id)
+            .gte("created_at", start)
+            .lt("created_at", end)
+            .execute()
+        )
+        return (getattr(res, "count", 0) or 0)
+    except Exception:
+        return 0
+
+def record_analysis(user_id):
+    try:
+        sb.table("analyses").insert({"user_id": user_id}).execute()
+    except Exception:
+        pass  # never crash UI
+
+def upgrade_panel():
+    st.error("You’ve used your free analysis for today.")
+    st.markdown("**Upgrade for more daily analyses:**")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.link_button("Go Pro (3/day) £9.99/yr", "https://buy.stripe.com/eVqeVdamUgkQ7Isgd19EI00")
+    with col2:
+        st.link_button("Team (15/day) £49.99/yr", "https://buy.stripe.com/cNi4gzfHe1pW5AkaSH9EI01")
+    with col3:
+        st.link_button("Coach (50/day) £99.99/yr", "https://buy.stripe.com/4gM14n52A3y47Is8Kz9EI02")
+# ---- /DAILY LIMIT HELPERS ----
 
 st.set_page_config(page_title="GateSnap AI", page_icon="🚦", layout="centered")
 
@@ -124,7 +205,18 @@ if st.session_state["user"] is None:
 # ---- Logged in: show uploader ----
 u = st.session_state["user"]
 name = (getattr(u, "user_metadata", None) or {}).get("name") or getattr(u, "email", "Rider")
-st.success(f"Welcome, {name}!")
+st.success(f"Welcome, {name
+                      # --- Daily limit gate (do this before showing the uploader) ---
+uid = u.id  # Supabase user id
+limit, plan = get_plan_limit(uid, name)
+used = analyses_today_count(uid)
+
+st.caption(f"Plan: **{plan.capitalize()}** • Today’s analyses: **{used}/{limit}**")
+
+if used >= limit:
+    upgrade_panel()
+    st.stop()  # stops the script before the uploader renders
+
 # --- Daily limit gate (add right under the welcome line) ---
 uid = st.session_state["user"].id  # Supabase user id
 limit, plan = get_plan_limit(uid)
