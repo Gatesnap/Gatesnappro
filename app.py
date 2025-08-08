@@ -1,5 +1,6 @@
 import streamlit as st
 import os
+from pose_analysis import analyze_video
 
 
 # Branding CSS
