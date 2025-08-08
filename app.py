@@ -1,79 +1,71 @@
 import streamlit as st
+from supabase import create_client, Client
 import os
-from pose_analysis import analyze_video
 
+# Supabase credentials (from your environment or paste directly if testing)
+SUPABASE_URL = os.environ.get("SUPABASE_URL") or "https://cdoxzmtxcfsuoviinxxd.supabase.co"
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY") or "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
 
-# Branding CSS
-st.markdown("""
-<style>
-h1, h2, h3 { letter-spacing: 0.2px; }
-.stButton>button {
-  background:#8CF51C;
-  color:#000;
-  border:0;
-  font-weight:700;
-}
-.stButton>button:hover {
-  filter:brightness(0.9);
-}
-.block-container { padding-top: 1.2rem; }
-</style>
-""", unsafe_allow_html=True)
-
-import streamlit as st
-from PIL import Image
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 st.set_page_config(page_title="GateSnap AI", layout="centered")
+st.markdown("<h1 style='color: white;'>GateSnap AI</h1>", unsafe_allow_html=True)
 
+# Session State
+if "user" not in st.session_state:
+    st.session_state.user = None
 
-st.title("Body Position Analysis for BMX Riders")
-
-st.markdown("### Create a Free Account")
-with st.form("signup_form"):
-    name = st.text_input("Full name")
+def show_login():
+    st.subheader("Login to GateSnap")
     email = st.text_input("Email")
     password = st.text_input("Password", type="password")
-    agree = st.checkbox("I agree to the Terms & Privacy")
-    submitted = st.form_submit_button("Create my free account")
-    if submitted:
-        if not (name and email and password and agree):
-            st.error("Please complete all fields and agree to continue.")
-        else:
-            st.success("Account created (placeholder). Login will be enabled after we connect Firebase.")
 
-with st.expander("🎯 Plans (Free forever, upgrades optional)", expanded=True):
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.markdown("**Free** • 1 analysis / day • £0 / forever")
-    with col2:
-        st.markdown("**Pro** • 3/day • £9.99 / year")
-        st.link_button("Upgrade to Pro", "https://buy.stripe.com/eVqeVdamUgkQ7Isgd19EI00")
-    with col3:
-        st.markdown("**Team** • 15/day • £49.99 / year")
-        st.link_button("Team Upgrade", "https://buy.stripe.com/cNi4gzfHe1pW5AkaSH9EI01")
-    st.markdown("**Coach License** • 50/day • £99.99 / year")
-    st.link_button("Coach Upgrade", "https://buy.stripe.com/4gM14n52A3y47Is8Kz9EI02")
+    if st.button("Login"):
+        try:
+            res = supabase.auth.sign_in_with_password({"email": email, "password": password})
+            st.session_state.user = res.user
+            st.success("Logged in!")
+            st.experimental_rerun()
+        except Exception as e:
+            st.error("Login failed. Check your credentials.")
 
-st.markdown("### 📤 Upload Your Gate Start Video")
-st.markdown("""
-✅ Set your phone to **1080p at 30fps**  
-✅ Crop your video to **2–6 seconds**  
-✅ Film from the **side**, showing your full body  
-✅ For best results, use a **tripod or stable surface**
+def show_signup():
+    st.subheader("Create Free Account")
+    name = st.text_input("Your Name")
+    email = st.text_input("Email")
+    password = st.text_input("Password", type="password")
 
-⚠️ Videos over 6 seconds or under 2 seconds will be rejected  
-⚠️ Avoid 4K or 60fps – they may fail to upload
-""")
+    if st.button("Create Account"):
+        try:
+            res = supabase.auth.sign_up({
+                "email": email,
+                "password": password,
+                "options": {"data": {"name": name}}
+            })
+            st.success("Account created. Please log in.")
+        except Exception as e:
+            st.error("Signup failed: " + str(e))
 
-uploaded_file = st.file_uploader("Upload your video", type=["mp4", "mov", "m4v", "mpeg", "mpeg4"])
-if uploaded_file:
-    data = uploaded_file.read()
-    suffix = os.path.splitext(uploaded_file.name)[1] or ".mp4"
-    try:
-        frame, feedback = analyze_video(data, suffix=suffix)
-        st.image(frame, channels="BGR", caption="Pose frame")
-        st.success(feedback.get("tip", "Analysis complete"))
-    except Exception as e:
-        st.error(f"Error: {e}")
+def show_upload_ui():
+    st.success(f"Welcome, {st.session_state.user.user_metadata.get('name', 'BMX Racer')}!")
+    st.subheader("Upload your BMX gate start video")
 
+    uploaded_file = st.file_uploader("Upload MP4/MOV (3–6 seconds)", type=["mp4", "mov"])
+    if uploaded_file:
+        # Placeholder analysis
+        st.video(uploaded_file)
+        st.success("✅ Video uploaded. Analysis coming soon.")
 
+    if st.button("Log out"):
+        st.session_state.user = None
+        st.experimental_rerun()
+
+# Page Routing
+if st.session_state.user:
+    show_upload_ui()
+else:
+    login_or_signup = st.radio("Welcome to GateSnap", ["Login", "Create Account"])
+    if login_or_signup == "Login":
+        show_login()
+    else:
+        show_signup()
