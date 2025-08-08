@@ -84,29 +84,36 @@ st.markdown(
 
 uploaded = st.file_uploader("Drag a 3–6s MP4/MOV here", type=["mp4","mov","m4v","mpeg","mpeg4","mpg"])
 
+from pose_analysis import process_video
+
 if uploaded:
-    import tempfile, cv2
-    # save to temp file so OpenCV can read it
+    import tempfile, os
+    data = uploaded.read()
     suffix = os.path.splitext(uploaded.name)[1] or ".mp4"
-    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-        tmp.write(uploaded.read())
-        path = tmp.name
 
-    st.video(path)
-
-    # Try to run your analysis if pose_analysis.py exists
-    try:
-        from pose_analysis import analyze_video
+    with st.spinner("Analyzing…"):
         try:
-            frame, feedback = analyze_video(open(path, "rb").read(), suffix=suffix)
-            st.image(frame, channels="BGR", caption="Analysis frame")
-            tip = feedback.get("tip", "Analysis complete.")
-            st.info(f"💡 Tip: {tip}")
+            res = process_video(data, suffix=suffix)
         except Exception as e:
             st.error(f"Analysis error: {e}")
-    except ImportError:
-        st.warning("Analysis module not found yet. Upload works — we’ll wire analysis next.")
+        else:
+            # 1) Replay with pose overlay
+            st.markdown("### ▶️ Gate Replay (with pose)")
+            st.video(res["video_overlay_path"])
 
-st.divider()
-if st.button("Log out"):
-    do_logout()
+            # 2) Key frames + notes
+            st.markdown("### 📸 Key Frames")
+            c1, c2 = st.columns(2)
+            with c1:
+                st.image(res["start_frame"], channels="BGR", caption="Start / Pre-Load")
+                st.write("• " + "\n• ".join(res["start_notes"]))
+            with c2:
+                st.image(res["end_frame"], channels="BGR", caption="Release")
+                st.write("• " + "\n• ".join(res["end_notes"]))
+
+            # 3) Summary tip
+            st.info(f"💡 Tip: {res['tip']}")
+
+            # Optional: let rider download the analyzed video
+            with open(res["video_overlay_path"], "rb") as f:
+                st.download_button("Download analyzed video", f, file_name="gatesnap_analysis.mp4")
