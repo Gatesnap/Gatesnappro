@@ -63,20 +63,16 @@ st.markdown("""
 ⚠️ Avoid 4K or 60fps – they may fail to upload
 """)
 
-uploaded_file = st.file_uploader("🎬 Upload your video", type=["mp4", "mov"])
+uploaded_file = st.file_uploader("Upload your video", type=["mp4", "mov", "m4v", "mpeg", "mpeg4"])
+if uploaded_file:
+    data = uploaded_file.read()
+    suffix = os.path.splitext(uploaded_file.name)[1] or ".mp4"
 
-from pose_analysis import analyze_video
+    try:
+        frame, feedback = analyze_video(data, suffix=suffix)
+        st.image(frame, channels="BGR", caption="Pose frame")
+        st.write("✅ Feedback:", feedback["tip"])
+    except Exception as e:
+        st.error(f"❌ Error: {e}")
 
-# After upload
-frame, analysis = analyze_video(uploaded_file)
-if not analysis or "angles" not in analysis:
-    st.error(f"Error: {analysis}")
-else:
-    st.image(frame, caption="Analysis Frame", channels="BGR")
-    for k, v in analysis["angles"].items():
-        st.write(f"{k.title()}: {v:.1f}°")
-    if analysis["tips"]:
-        st.warning("Tip: " + " ".join(analysis["tips"]))
-    else:
-        st.success("Your form looks good!")
 
