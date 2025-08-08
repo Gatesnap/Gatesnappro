@@ -69,12 +69,11 @@ uploaded_file = st.file_uploader("Upload your video", type=["mp4", "mov", "m4v",
 if uploaded_file:
     data = uploaded_file.read()
     suffix = os.path.splitext(uploaded_file.name)[1] or ".mp4"
-
     try:
         frame, feedback = analyze_video(data, suffix=suffix)
         st.image(frame, channels="BGR", caption="Pose frame")
-        st.write("✅ Feedback:", feedback["tip"])
+        st.success(feedback.get("tip", "Analysis complete"))
     except Exception as e:
-        st.error(f"❌ Error: {e}")
+        st.error(f"Error: {e}")
 
 
