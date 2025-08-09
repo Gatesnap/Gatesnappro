@@ -1,27 +1,43 @@
 # --- GateSnap AI: app.py ---
 import os
+import base64
 import streamlit as st
 from supabase import create_client
 from datetime import datetime, timedelta, timezone
 from pose_analysis import process_video
+from uuid import uuid4
 
-# ========= Page config & theme =========
-st.set_page_config(page_title="GateSnap AI", page_icon="🚦", layout="centered")
+# ========= THEME =========
 st.markdown("""
     <style>
-        .stApp { background-color: black; color: white; }
-        h1, h2, h3, h4, h5, h6, p, label, .stMarkdown { color: white !important; }
-        div[data-testid="stButton"] button { background-color: #00ff88; color: black; border: none; }
-        div[data-testid="stButton"] button:hover { background-color: #00cc66; }
+        .stApp { background-color: #000; color: #fff; }
+        .stButton>button { background-color: #00ff88; color: black; font-weight: bold; border-radius: 8px; }
+        .stTextInput>div>div>input { background-color: #111; color: white; }
+        .stTextInput>label { color: white; }
+        .stFileUploader { color: white; }
+        h1, h2, h3, h4, h5, h6, p, span, div { color: white !important; }
     </style>
 """, unsafe_allow_html=True)
+
+# ========= EMBED LOGO =========
+with open("Gatesnap Logo.png", "rb") as f:
+    logo_bytes = f.read()
+logo_b64 = base64.b64encode(logo_bytes).decode()
+st.markdown(
+    f"""
+    <div style="text-align:center;">
+        <img src="data:image/png;base64,{logo_b64}" alt="GateSnap Logo" width="300">
+    </div>
+    """,
+    unsafe_allow_html=True
+)
 
 # ========= Supabase client =========
 SUPABASE_URL = os.getenv("SUPABASE_URL", "")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
 sb = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# ========= Session defaults =========
+# Keep token across reruns so RLS works for table reads/writes
 st.session_state.setdefault("user", None)
 st.session_state.setdefault("access_token", None)
 if st.session_state.get("access_token"):
@@ -54,11 +70,13 @@ def get_or_create_profile(user_id, display_name=None):
         row = _safe_single(res)
         if row:
             if user_email and row.get("email") != user_email:
-                sb.table("profiles").update({"email": user_email}).eq("user_id", user_id).execute()
+                try:
+                    sb.table("profiles").update({"email": user_email}).eq("user_id", user_id).execute()
+                except Exception:
+                    pass
             return row
     except Exception:
         pass
-
     payload = {"user_id": user_id, "plan": "free"}
     if display_name:
         payload["name"] = display_name
@@ -100,25 +118,16 @@ def record_analysis(user_id):
 
 def upgrade_panel():
     st.error("You’ve used your free analysis for today.")
-    st.markdown("**Upgrade for more daily analyses:**")
     col1, col2, col3 = st.columns(3)
     with col1:
-        st.link_button("Go Pro (3/day) £9.99/yr", "https://buy.stripe.com/eVqeVdamUgkQ7Isgd19EI00")
+        st.link_button("Go Pro (3/day) £9.99/yr",
+                       "https://buy.stripe.com/eVqeVdamUgkQ7Isgd19EI00")
     with col2:
-        st.link_button("Team (15/day) £49.99/yr", "https://buy.stripe.com/cNi4gzfHe1pW5AkaSH9EI01")
+        st.link_button("Team (15/day) £49.99/yr",
+                       "https://buy.stripe.com/cNi4gzfHe1pW5AkaSH9EI01")
     with col3:
-        st.link_button("Coach (50/day) £99.99/yr", "https://buy.stripe.com/4gM14n52A3y47Is8Kz9EI02")
-
-# ========= Logo =========
-st.markdown(
-    """
-    <div style="text-align:center;">
-        <img src="https://raw.githubusercontent.com/your-repo/gatesnap_logo.png" alt="GateSnap Logo" width="250">
-    </div>
-    """,
-    unsafe_allow_html=True
-)
-st.caption("Body Position Analysis for BMX Riders")
+        st.link_button("Coach (50/day) £99.99/yr",
+                       "https://buy.stripe.com/4gM14n52A3y47Is8Kz9EI02")
 
 # ========= Auth helpers =========
 def do_signup(name, email, password):
@@ -174,7 +183,6 @@ if st.session_state["user"] is None:
                 st.rerun()
             except Exception:
                 st.error("Log in failed. Check your email & password.")
-
     st.stop()
 
 # ========= Logged in UI =========
@@ -199,8 +207,7 @@ st.markdown("""
 """)
 
 uploaded = st.file_uploader("Drag a 3–6s MP4/MOV here",
-    type=["mp4", "mov", "m4v", "mpeg", "mpeg4", "mpg"])
-
+                             type=["mp4","mov","m4v","mpeg","mpeg4","mpg"])
 if uploaded:
     data = uploaded.read()
     suffix = os.path.splitext(uploaded.name)[1] or ".mp4"
@@ -222,9 +229,10 @@ if uploaded:
                 st.image(res["end_frame"], channels="BGR", caption="Release")
                 st.write("• " + "\n• ".join(res["end_notes"]))
             st.info(f"💡 Tip: {res['tip']}")
-            from uuid import uuid4
             with open(res["video_overlay_path"], "rb") as f:
-                st.download_button("Download analyzed video", f, file_name="gatesnap_analysis.mp4", key=f"dl-{uuid4()}")
+                st.download_button("Download analyzed video", f,
+                                   file_name="gatesnap_analysis.mp4",
+                                   key=f"dl-{uuid4()}")
 
 st.divider()
 st.button("Log out", on_click=do_logout)
