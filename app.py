@@ -35,16 +35,23 @@ def _safe_single(res):
     return None
 
 def get_or_create_profile(user_id, display_name=None):
-    # try read
     try:
         res = sb.table("profiles").select("*").eq("user_id", user_id).limit(1).execute()
         row = _safe_single(res)
         if row:
+            # keep email fresh if we have it
+            user_email = getattr(st.session_state.get("user"), "email", None)
+            if user_email and row.get("email") != user_email:
+                sb.table("profiles").update({"email": user_email}).eq("user_id", user_id).execute()
             return row
     except Exception:
         pass
-    # create default free
-    payload = {"user_id": user_id, "plan": "free"}
+
+    payload = {
+        "user_id": user_id,
+        "plan": "free",
+        "email": getattr(st.session_state.get("user"), "email", None),
+    }
     if display_name:
         payload["name"] = display_name
     try:
@@ -52,6 +59,7 @@ def get_or_create_profile(user_id, display_name=None):
         return _safe_single(ins) or payload
     except Exception:
         return payload
+
 
 def get_plan_limit(user_id, display_name=None):
     prof = get_or_create_profile(user_id, display_name)
