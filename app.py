@@ -109,8 +109,16 @@ def upgrade_panel():
                        "https://buy.stripe.com/4gM14n52A3y47Is8Kz9EI02")
 
 # ========= Page + session =========
-st.set_page_config(page_title="GateSnap AI", page_icon="🚦", layout="centered")
-st.session_state.setdefault("user", None)
+# -------- UI --------
+st.markdown(
+    """
+    <div style="text-align:center;">
+        <img src="Gatesnap Logo.png" alt="GateSnap Logo" width="250">
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+st.caption("Body Position Analysis for BMX Riders")
 
 # ========= Auth helpers =========
 def do_signup(name, email, password):
