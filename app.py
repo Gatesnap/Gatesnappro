@@ -248,7 +248,7 @@ uploaded = st.file_uploader("Drag a 3–6s MP4/MOV here", type=["mp4","mov","m4v
 from pose_analysis import process_video
 
 if uploaded:
-    import tempfile, os
+    import os, tempfile
     data = uploaded.read()
     suffix = os.path.splitext(uploaded.name)[1] or ".mp4"
 
@@ -257,37 +257,34 @@ if uploaded:
             res = process_video(data, suffix=suffix)
         except Exception as e:
             st.error(f"Analysis error: {e}")
-            else:
-        # 1) Replay with pose overlay
-        st.markdown("### ▶️ Gate Replay (with pose)")
-        st.video(res["video_overlay_path"])
+        else:
+            # 1) Replay with pose overlay
+            st.markdown("### ▶️ Gate Replay (with pose)")
+            st.video(res["video_overlay_path"])
 
-        # 2) Key frames + notes
-        st.markdown("### 📸 Key Frames")
-        c1, c2 = st.columns(2)
-        with c1:
-            st.image(res["start_frame"], channels="BGR", caption="Start / Pre-Load")
-            st.write("• " + "\n• ".join(res["start_notes"]))
-        with c2:
-            st.image(res["end_frame"], channels="BGR", caption="Release")
-            st.write("• " + "\n• ".join(res["end_notes"]))
+            # 2) Key frames + notes
+            st.markdown("### 📸 Key Frames")
+            c1, c2 = st.columns(2)
+            with c1:
+                st.image(res["start_frame"], channels="BGR", caption="Start / Pre-Load")
+                st.write("• " + "\n• ".join(res["start_notes"]))
+            with c2:
+                st.image(res["end_frame"], channels="BGR", caption="Release")
+                st.write("• " + "\n• ".join(res["end_notes"]))
 
-        # 3) Summary tip
-        st.info(f"💡 Tip: {res['tip']}")
+            # 3) Summary tip
+            st.info(f"💡 Tip: {res['tip']}")
 
-        # 4) Download button (unique key so Streamlit doesn’t complain)
-        from uuid import uuid4
-        with open(res["video_overlay_path"], "rb") as f:
-            st.download_button(
-                "Download analyzed video",
-                f,
-                file_name="gatesnap_analysis.mp4",
-                key=f"dl-{uuid4()}",
-            )
+            # 4) Download button (unique key)
+            from uuid import uuid4
+            with open(res["video_overlay_path"], "rb") as f:
+                st.download_button(
+                    "Download analyzed video",
+                    f,
+                    file_name="gatesnap_analysis.mp4",
+                    key=f"dl-{uuid4()}",
+                )
 
-        # 5) Record today’s usage
-        try:
+            # 5) Record today’s usage
             record_analysis(uid)
             st.success("Usage recorded for today.")
-        except Exception as e:
-            st.warning(f"Could not record usage: {e}")
