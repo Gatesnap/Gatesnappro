@@ -177,6 +177,7 @@ if st.session_state["user"] is None:
 
 # ========= Logged in UI =========
 u = st.session_state["user"]
+st.write("DEBUG USER ID:", u.id)
 display_name = (getattr(u, "user_metadata", None) or {}).get("name") or getattr(u, "email", "Rider")
 st.success(f"Welcome, {display_name}!")
 
