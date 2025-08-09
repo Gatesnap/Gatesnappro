@@ -1,3 +1,4 @@
+flask
 supabase
 streamlit
 opencv-python-headless
