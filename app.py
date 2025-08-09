@@ -196,20 +196,20 @@ if st.session_state["user"] is None:
         email_li = st.text_input("Email", key="li_email")
         pw_li = st.text_input("Password", type="password", key="li_pw")
         if st.button("Log in"):
-            try:
-                res = do_login(email_li, pw_li)
-st.session_state["user"] = res.user
-# NEW: keep the access token so DB calls run as this user
-st.session_state["access_token"] = getattr(res, "session", None).access_token
-# Attach the token to the PostgREST client
-if st.session_state.get("access_token"):
-    sb.postgrest.auth(st.session_state["access_token"])
+        
+  try:
+    res = do_login(email_li, pw_li)
+    st.session_state["user"] = res.user
+    # NEW: store access token for RLS-authenticated queries
+    st.session_state["access_token"] = getattr(res, "session", None).access_token
+    if st.session_state.get("access_token"):
+        sb.postgrest.auth(st.session_state["access_token"])
+    st.success("Logged in ✅")
+    st.rerun()
 
-st.success("Logged in ✅")
-st.rerun()
+except Exception as e:
+    st.error(f"Login failed: {e}")
 
-            except Exception:
-                st.error("Log in failed. Check your email & password.")
 
     st.stop()  # don’t show upload until logged in
 
