@@ -1,38 +1,31 @@
 # --- GateSnap AI: app.py ---
 import os
-import base64
 import streamlit as st
 from supabase import create_client
 from datetime import datetime, timedelta, timezone
-from pose_analysis import process_video
-from uuid import uuid4
 
-# ========= THEME =========
-st.markdown("""
-    <style>
-        .stApp { background-color: #000; color: #fff; }
-        .stButton>button { background-color: #00ff88; color: black; font-weight: bold; border-radius: 8px; }
-        .stTextInput>div>div>input { background-color: #111; color: white; }
-        .stTextInput>label { color: white; }
-        .stFileUploader { color: white; }
-        h1, h2, h3, h4, h5, h6, p, span, div { color: white !important; }
-    </style>
-""", unsafe_allow_html=True)
-
-# ========= EMBED LOGO =========
-# --- Logo from GitHub (no local file needed) ---
-LOGO_URL = "PASTE_YOUR_RAW_GITHUB_URL_HERE"  # e.g. https://raw.githubusercontent.com/yourname/yourrepo/main/gatesnap_logo.png
-import streamlit as st
+# ========= Page style =========
+st.set_page_config(page_title="GateSnap AI", page_icon="🚦", layout="centered")
 
 st.markdown(
-    f"""
-    <div style="text-align:center; margin-top:8px;">
-        <img src="{LOGO_URL}" width="260" alt="GateSnap Logo">
-    </div>
+    """
+    <style>
+        body {
+            background-color: black;
+            color: white;
+        }
+        .stButton button {
+            background-color: #00ff88;
+            color: black;
+            font-weight: bold;
+        }
+        .stTextInput > div > div > input {
+            color: black;
+        }
+    </style>
     """,
-    unsafe_allow_html=True,
+    unsafe_allow_html=True
 )
-
 
 # ========= Supabase client =========
 SUPABASE_URL = os.getenv("SUPABASE_URL", "")
@@ -40,8 +33,8 @@ SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
 sb = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # Keep token across reruns so RLS works for table reads/writes
-st.session_state.setdefault("user", None)
 st.session_state.setdefault("access_token", None)
+st.session_state.setdefault("user", None)
 if st.session_state.get("access_token"):
     sb.postgrest.auth(st.session_state["access_token"])
 
@@ -66,11 +59,15 @@ def _safe_single(res):
     return None
 
 def get_or_create_profile(user_id, display_name=None):
+    """Ensure a profiles row exists; keep email fresh if we have it."""
     user_email = getattr(st.session_state.get("user"), "email", None)
+
+    # Try read
     try:
         res = sb.table("profiles").select("*").eq("user_id", user_id).limit(1).execute()
         row = _safe_single(res)
         if row:
+            # keep email up to date if it changed/was missing
             if user_email and row.get("email") != user_email:
                 try:
                     sb.table("profiles").update({"email": user_email}).eq("user_id", user_id).execute()
@@ -79,6 +76,8 @@ def get_or_create_profile(user_id, display_name=None):
             return row
     except Exception:
         pass
+
+    # Create default
     payload = {"user_id": user_id, "plan": "free"}
     if display_name:
         payload["name"] = display_name
@@ -95,7 +94,8 @@ def get_plan_limit(user_id, display_name=None):
     plan = (prof or {}).get("plan", "free")
     if not isinstance(plan, str):
         plan = "free"
-    return PLAN_LIMITS.get(plan.lower(), 1), plan.lower()
+    plan = plan.lower()
+    return PLAN_LIMITS.get(plan, 1), plan
 
 def analyses_today_count(user_id):
     start, end = _today_bounds_utc()
@@ -108,7 +108,7 @@ def analyses_today_count(user_id):
             .lt("created_at", end)
             .execute()
         )
-        return getattr(res, "count", 0) or 0
+        return (getattr(res, "count", 0) or 0)
     except Exception:
         return 0
 
@@ -116,10 +116,11 @@ def record_analysis(user_id):
     try:
         sb.table("analyses").insert({"user_id": user_id}).execute()
     except Exception:
-        pass
+        pass  # never crash UI
 
 def upgrade_panel():
     st.error("You’ve used your free analysis for today.")
+    st.markdown("**Upgrade for more daily analyses:**")
     col1, col2, col3 = st.columns(3)
     with col1:
         st.link_button("Go Pro (3/day) £9.99/yr",
@@ -130,6 +131,17 @@ def upgrade_panel():
     with col3:
         st.link_button("Coach (50/day) £99.99/yr",
                        "https://buy.stripe.com/4gM14n52A3y47Is8Kz9EI02")
+
+# ========= Simple text logo =========
+st.markdown(
+    """
+    <h1 style='text-align:center; color:white; font-weight:bold; font-size:48px;'>
+        GATESNAP
+    </h1>
+    """,
+    unsafe_allow_html=True
+)
+st.caption("Body Position Analysis for BMX Riders")
 
 # ========= Auth helpers =========
 def do_signup(name, email, password):
@@ -148,7 +160,7 @@ def do_logout():
     st.session_state["access_token"] = None
     st.rerun()
 
-# ========= Auth block =========
+# ========= Auth block (top) =========
 if st.session_state["user"] is None:
     st.markdown("### Create a Free Account / Log in")
     tab_signup, tab_login = st.tabs(["Create account", "Log in"])
@@ -185,6 +197,7 @@ if st.session_state["user"] is None:
                 st.rerun()
             except Exception:
                 st.error("Log in failed. Check your email & password.")
+
     st.stop()
 
 # ========= Logged in UI =========
@@ -192,27 +205,37 @@ u = st.session_state["user"]
 display_name = (getattr(u, "user_metadata", None) or {}).get("name") or getattr(u, "email", "Rider")
 st.success(f"Welcome, {display_name}!")
 
+# Daily limit gate
 uid = u.id
 limit, plan = get_plan_limit(uid, display_name)
 used = analyses_today_count(uid)
+
 st.caption(f"Plan: **{plan.capitalize()}** • Today’s analyses: **{used}/{limit}**")
 if used >= limit:
     upgrade_panel()
     st.stop()
 
 st.markdown("### 📤 Upload Your Gate Start Video")
-st.markdown("""
+st.markdown(
+    """
 ✅ Set your phone to **1080p at 30fps**  
 ✅ Crop your video to **2–6 seconds**  
 ✅ Film from the **side**, full body in frame  
 ⚠️ Videos **>6s** or **<2s** will be rejected
-""")
+"""
+)
 
-uploaded = st.file_uploader("Drag a 3–6s MP4/MOV here",
-                             type=["mp4","mov","m4v","mpeg","mpeg4","mpg"])
+uploaded = st.file_uploader(
+    "Drag a 3–6s MP4/MOV here",
+    type=["mp4", "mov", "m4v", "mpeg", "mpeg4", "mpg"],
+)
+
+from pose_analysis import process_video
+
 if uploaded:
     data = uploaded.read()
     suffix = os.path.splitext(uploaded.name)[1] or ".mp4"
+
     with st.spinner("Analyzing…"):
         try:
             res = process_video(data, suffix=suffix)
@@ -231,10 +254,14 @@ if uploaded:
                 st.image(res["end_frame"], channels="BGR", caption="Release")
                 st.write("• " + "\n• ".join(res["end_notes"]))
             st.info(f"💡 Tip: {res['tip']}")
+            from uuid import uuid4
             with open(res["video_overlay_path"], "rb") as f:
-                st.download_button("Download analyzed video", f,
-                                   file_name="gatesnap_analysis.mp4",
-                                   key=f"dl-{uuid4()}")
+                st.download_button(
+                    "Download analyzed video",
+                    f,
+                    file_name="gatesnap_analysis.mp4",
+                    key=f"dl-{uuid4()}",
+                )
 
 st.divider()
 st.button("Log out", on_click=do_logout)
