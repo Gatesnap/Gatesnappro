@@ -20,17 +20,19 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ========= EMBED LOGO =========
-with open("Gatesnap Logo.png", "rb") as f:
-    logo_bytes = f.read()
-logo_b64 = base64.b64encode(logo_bytes).decode()
+# --- Logo from GitHub (no local file needed) ---
+LOGO_URL = "PASTE_YOUR_RAW_GITHUB_URL_HERE"  # e.g. https://raw.githubusercontent.com/yourname/yourrepo/main/gatesnap_logo.png
+import streamlit as st
+
 st.markdown(
     f"""
-    <div style="text-align:center;">
-        <img src="data:image/png;base64,{logo_b64}" alt="GateSnap Logo" width="300">
+    <div style="text-align:center; margin-top:8px;">
+        <img src="{LOGO_URL}" width="260" alt="GateSnap Logo">
     </div>
     """,
-    unsafe_allow_html=True
+    unsafe_allow_html=True,
 )
+
 
 # ========= Supabase client =========
 SUPABASE_URL = os.getenv("SUPABASE_URL", "")
