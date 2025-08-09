@@ -1,4 +1,4 @@
-# --- GateSnap AI: clean app.py ---
+# --- GateSnap AI: app.py (ready to paste) ---
 import os
 import streamlit as st
 from supabase import create_client
@@ -9,12 +9,12 @@ SUPABASE_URL = os.getenv("SUPABASE_URL", "")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
 sb = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# Re-attach user token on reruns so RLS works
+# Keep token across reruns so RLS works for table reads/writes
 st.session_state.setdefault("access_token", None)
 if st.session_state.get("access_token"):
     sb.postgrest.auth(st.session_state["access_token"])
 
-# ========= Daily limit helpers =========
+# ========= Daily limit + profile helpers =========
 PLAN_LIMITS = {"free": 1, "pro": 3, "team": 15, "coach": 50}
 
 def _today_bounds_utc():
@@ -35,31 +35,35 @@ def _safe_single(res):
     return None
 
 def get_or_create_profile(user_id, display_name=None):
+    """Ensure a profiles row exists; keep email fresh if we have it."""
+    user_email = getattr(st.session_state.get("user"), "email", None)
+
+    # Try read
     try:
         res = sb.table("profiles").select("*").eq("user_id", user_id).limit(1).execute()
         row = _safe_single(res)
         if row:
-            # keep email fresh if we have it
-            user_email = getattr(st.session_state.get("user"), "email", None)
+            # keep email up to date if it changed/was missing
             if user_email and row.get("email") != user_email:
-                sb.table("profiles").update({"email": user_email}).eq("user_id", user_id).execute()
+                try:
+                    sb.table("profiles").update({"email": user_email}).eq("user_id", user_id).execute()
+                except Exception:
+                    pass
             return row
     except Exception:
         pass
 
-    payload = {
-        "user_id": user_id,
-        "plan": "free",
-        "email": getattr(st.session_state.get("user"), "email", None),
-    }
+    # Create default
+    payload = {"user_id": user_id, "plan": "free"}
     if display_name:
         payload["name"] = display_name
+    if user_email:
+        payload["email"] = user_email
     try:
         ins = sb.table("profiles").insert(payload).execute()
         return _safe_single(ins) or payload
     except Exception:
         return payload
-
 
 def get_plan_limit(user_id, display_name=None):
     prof = get_or_create_profile(user_id, display_name)
@@ -154,16 +158,19 @@ if st.session_state["user"] is None:
         if st.button("Log in", key="btn_login"):
             try:
                 res = do_login(email_li, pw_li)
-                # Save user
+                # Save user & token
                 st.session_state["user"] = res.user
-                # Save & attach access token so RLS table calls work
                 sess = getattr(res, "session", None)
                 st.session_state["access_token"] = getattr(sess, "access_token", None)
                 if st.session_state.get("access_token"):
                     sb.postgrest.auth(st.session_state["access_token"])
+                # Ensure profile row exists & email is stored
+                display_name = (getattr(res.user, "user_metadata", None) or {}).get("name") \
+                               or getattr(res.user, "email", None)
+                get_or_create_profile(res.user.id, display_name)
                 st.success("Logged in ✅")
                 st.rerun()
-            except Exception as e:
+            except Exception:
                 st.error("Log in failed. Check your email & password.")
 
     st.stop()  # don’t show uploader until logged in
@@ -201,7 +208,6 @@ uploaded = st.file_uploader(
 from pose_analysis import process_video
 
 if uploaded:
-    import tempfile
     data = uploaded.read()
     suffix = os.path.splitext(uploaded.name)[1] or ".mp4"
 
@@ -211,7 +217,7 @@ if uploaded:
         except Exception as e:
             st.error(f"Analysis error: {e}")
         else:
-            # Record today’s usage first (so refresh blocks the next try)
+            # Record usage first (prevents double runs on refresh)
             record_analysis(uid)
 
             # 1) Replay with pose overlay
@@ -231,7 +237,7 @@ if uploaded:
             # 3) Summary tip
             st.info(f"💡 Tip: {res['tip']}")
 
-            # 4) Download button (unique key so Streamlit doesn’t complain)
+            # 4) Download button (unique key)
             from uuid import uuid4
             with open(res["video_overlay_path"], "rb") as f:
                 st.download_button(
