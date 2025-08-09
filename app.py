@@ -61,6 +61,10 @@ def upgrade_panel():
 SUPABASE_URL = os.getenv("SUPABASE_URL", "https://cdoxzmtxcfsuoviinxxd.supabase.co")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
 sb = create_client(SUPABASE_URL, SUPABASE_KEY)
+# If user already logged in, ensure DB requests use their token (RLS)
+if st.session_state.get("access_token"):
+    sb.postgrest.auth(st.session_state["access_token"])
+
 # ---- DAILY LIMIT HELPERS ----
 from datetime import datetime, timedelta, timezone
 
@@ -194,9 +198,16 @@ if st.session_state["user"] is None:
         if st.button("Log in"):
             try:
                 res = do_login(email_li, pw_li)
-                st.session_state["user"] = res.user
-                st.success("Logged in ✅")
-                st.rerun()
+st.session_state["user"] = res.user
+# NEW: keep the access token so DB calls run as this user
+st.session_state["access_token"] = getattr(res, "session", None).access_token
+# Attach the token to the PostgREST client
+if st.session_state.get("access_token"):
+    sb.postgrest.auth(st.session_state["access_token"])
+
+st.success("Logged in ✅")
+st.rerun()
+
             except Exception:
                 st.error("Log in failed. Check your email & password.")
 
